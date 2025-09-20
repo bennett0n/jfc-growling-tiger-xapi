@@ -19,30 +19,19 @@
             </http:request>
             <error-handler>
                 <on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="e63c50c6-304a-49ec-b4f1-4a61544232aa">
-                    <raise-error doc:name="APP:NO_RECORD_FOUND" doc:id="c8706888-a5b2-47cf-914f-dcde82eb544e" type="APP:NO_RECORD_FOUND" />
+                    <set-variable value="#[error.errorMessage.attributes.statusCode default 500]" doc:name="error_httpStatus" doc:id="546891ba-6650-49ae-94b6-ba58d1243ccd" variableName="error_httpStatus" />
+					<set-variable value="#[if(error.errorMessage.payload is Object)&#10;(error.errorMessage.payload.message default null)&#10;else (error.detailedDescription default null)]" doc:name="error_payload" doc:id="820541f7-6bc6-4ce9-8cd0-cf8efd2cf064" variableName="error_payload" />
+					<choice doc:name="Choice" doc:id="70250564-c768-4a68-9b83-b90e1befc225" >
+						<when expression='#[vars.error_httpStatus == 404 and vars.error_payload == "No record found"]' >
+							<raise-error doc:name="APP:NO_RECORD_FOUND" doc:id="b028ef1e-3b9e-4f39-b1ff-e4ca174ddc50" type="APP:NO_RECORD_FOUND" />
+						</when>
+					</choice>
                 </on-error-propagate>
             </error-handler>
         </try>
 		<ee:transform doc:name="Transform Message">
             <ee:message>
-                <ee:set-payload><![CDATA[%dw 2.0
-output application/json
----
-{
-	orderId: (payload.orderId splitBy "@")[1] default payload.orderId,
-	buyer: {
-		fullName: payload.customer,
-//		phone: payload.contact
-	},
-	foodItems: payload.items map {
-		productCode: $.productId,
-		name: $.name,
-		priceEach: $.price,
-		qty: $.quantity
-	},
-	amountDue: payload.totalAmount,
-	orderedAt: payload.orderDate
-}]]></ee:set-payload>
+				<ee:set-payload resource="./dwl/get-order-response.dwl" />
             </ee:message>
         </ee:transform>
 	</sub-flow>
@@ -50,44 +39,21 @@ output application/json
 		<set-variable value="#[payload]" doc:name="input_payload" doc:id="b6b64ef8-5248-47bd-8eae-4573ba954233" variableName="input_payload" />
 		<ee:transform doc:name="payload to send" doc:id="6899a9a2-cd92-4a00-a8c8-d8e6821a02c8">
             <ee:message>
-                <ee:set-payload><![CDATA[%dw 2.0
-output application/json
----
-{
-	orderId: p('app.order-prefix') ++ '@' ++ vars.input_payload.orderId,
-	source: p('app.order-source'),
-	customerName: vars.input_payload.buyer.fullName,
-	contact: vars.input_payload.buyer.contact,
-	items: vars.input_payload.foodItems map {
-		productId: $.productCode,
-		name: $.name,
-		price: $.priceEach,
-		quantity: $.qty	
-	},
-	totalAmount: vars.input_payload.amountDue,
-	paymentType: vars.input_payload.paymentType,
-	orderDate: vars.input_payload.orderedAt	
-	
-}]]></ee:set-payload>
+				<ee:set-payload resource="./dwl/post-order-payload.dwl" />
             </ee:message>
         </ee:transform>
 		<try doc:name="Try" doc:id="d32b1dbc-ee01-4308-9b8b-deef6d74d319">
 			<http:request method="POST" doc:name="POST /orders" doc:id="a74f606b-8bc6-4f63-9553-b84a9b92cc18" config-ref="OrderSAPI" path="${paths.post-orders}" />
 			<error-handler>
 				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="0700dd7b-0e28-4e46-86f6-503ebbe88582">
-					<set-variable value="#[error.errorMessage.payload.message]" doc:name="error_payload" doc:id="0428b814-ddbf-4a7d-bc77-ae3e3e4abb10" variableName="error_payload" />
+					<set-variable value="#[if(error.errorMessage.payload is Object)&#10;(error.errorMessage.payload.message default null)&#10;else (error.detailedDescription default null)]" doc:name="error_payload" doc:id="6bf59827-0d36-4c18-ad39-0a65fecdedaf" variableName="error_payload" />
 					<raise-error doc:name="APP:POST_ORDER_ERROR" doc:id="b9b6d92e-7ea2-4d40-b3e9-58a3ebce45ec" type="APP:POST_ORDER_ERROR" />
 				</on-error-propagate>
 			</error-handler>
 		</try>
 		<ee:transform doc:name="Transform Message">
             <ee:message>
-                <ee:set-payload><![CDATA[%dw 2.0
-output application/json
----
-{
-  message: "Order submitted"
-}]]></ee:set-payload>
+				<ee:set-payload resource="./dwl/post-order-response.dwl" />
             </ee:message>
         </ee:transform>
 	</sub-flow>
